@@ -80,9 +80,10 @@ uint8_t get_pitch(char note) {
 // typedef const char* song;
 
 void play_music(const char *composition) {
-  uint8_t pitch = get_pitch(composition[Sound->position++]);
+  uint8_t pitch = get_pitch(composition[Sound->position]);
+  unsigned int durations[] = { 280, 560, 280, 140, 280, 560, 280, 140 };
   double frequency = 261.2 * pow(2.0, pitch / 12.0);
-  tone(Sound->output, frequency, 500);
+  tone(Sound->output, frequency, durations[Sound->position++]);
   if (Sound->position < 8) {
     //    TODO: Clean this up.
   } else {
@@ -123,7 +124,7 @@ void loop() {
 
   if (Sound->playing)
     play_music(
-        "cdefgabh"); /* string's if is hard-coded to handle a max of only 8
+        "hcbdafge"); /* string's if is hard-coded to handle a max of only 8
                         notes. */
   /* TODO: add support for strings > 8 notes.*/
 
