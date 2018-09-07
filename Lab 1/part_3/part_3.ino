@@ -1,6 +1,18 @@
 /**
  * Lab 1, Part 3 (25%)
- * Follow instructions on https://www.arduino.cc/en/Tutorial/Debounce so that
+ * Connect a speaker to the UNO board (through a resistor if too loud) and
+ * modify the previous program  so as to play through a short song segment
+ * repetitively. The push-button allows the toggling between playing of the song
+ * and turning the song off. The program should be designed so that the song can
+ * be represented as a character string (or multiple character strings) and it
+ * should include tones of different duration√√. Note that a character string is
+ * the same as an array of characters. You may impose conditions on how long the
+ * push-button needs to be pressed down.
+ *
+ * Conditions:
+ * Hold the button for at least 1.75 second or change the note duration and
+ * delay.
+ *
  * Remember: Show your lab instructor!
  */
 
@@ -10,16 +22,16 @@
 
 /* btn { pressed, state, prev_state, pin } */
 struct btn_s {
-  int pressed;
-  int state;
-  int prev_state;
+  int       pressed;
+  int       state;
+  int       prev_state;
   const int pin;
 } btn_def = {1, 1, 1, BTN_PIN};
 typedef struct btn_s btn;
 
 /* led { state, pin } */
 struct led_s {
-  int state;
+  int       state;
   const int pin;
 } led_def = {0, LED_PIN};
 typedef struct led_s led;
@@ -27,17 +39,16 @@ typedef struct led_s led;
 /* debounce { delay, last_time } */
 struct debounce_s {
   const unsigned delay;
-  unsigned long last_time; /* old millis() */
+  unsigned long  last_time; /* old millis() */
 } dbn_def = {10, 0};
 typedef debounce_s dbn;
 
 struct sound_s {
-  const byte    output;
-  bool          playing;
-  uint8_t       position;
+  const byte output;
+  bool       playing;
+  uint8_t    position;
 } snd_def = {11, false, 0};
 typedef sound_s snd;
-
 
 /* initalize structs with default values. */
 btn *Toggle   = &btn_def;
@@ -45,21 +56,48 @@ led *LED      = &led_def;
 dbn *Debounce = &dbn_def;
 snd *Sound    = &snd_def;
 
-void playMusic() {
-  char note[] = "CDEFGABH";
-  uint8_t pitch[] = { 0, 2, 4, 5, 7, 9, 11, 12 };
-  uint8_t songs[] = {262, 164, 262, 164, 262, 164 };
-  double  freq[]  = { 261.6, 293.6, 329.6, 349.2, 392, 440, 493.8, 523.2 };
-  tone(Sound->output, songs[Sound->position], 4 * 1.30);
-  Sound->position += 1;
+uint8_t get_pitch(char note) {
+  static const uint8_t lookup[8] = {
+      0x9 /* a */
+      ,
+      0xB /* b */
+      ,
+      0x0 /* c */
+      ,
+      0x2 /* d */
+      ,
+      0x4 /* e */
+      ,
+      0x5 /* f */
+      ,
+      0x7 /* g */
+      ,
+      0xC /* C */
+  };      /* Numerical pitch mapped to note. */
+  return lookup[note - 'a'];
+}
+
+// typedef const char* song;
+
+void play_music(const char *composition) {
+  uint8_t pitch = get_pitch(composition[Sound->position++]);
+  double frequency = 261.2 * pow(2.0, pitch / 12.0);
+  tone(Sound->output, frequency, 500);
+  if (Sound->position < 8) {
+    //    TODO: Clean this up.
+  } else {
+    Sound->position = 0;
+  }
+  delay(1000);
+  noTone(Sound->output);
 }
 
 void setup() {
   pinMode(Toggle->pin, INPUT_PULLUP);
   pinMode(LED->pin, OUTPUT);
-  digitalWrite(
-      LED->pin,
-      LED->state); /* Our inital default for the LED is off, i.e. 0*/
+  digitalWrite(LED->pin,
+               LED->state); /* Our inital default for the LED is off, i.e. 0*/
+  Serial.begin(9600);
 }
 
 void loop() {
@@ -67,7 +105,7 @@ void loop() {
 
   if ((Toggle->prev_state) != (Toggle->pressed)) {
     /* If the last button state does not match the current reading, update
-     * last debounce time. */
+       last debounce time. */
     Debounce->last_time = millis();
   }
 
@@ -83,8 +121,12 @@ void loop() {
     }
   }
 
-  if (Sound->playing) playMusic();
-  
+  if (Sound->playing)
+    play_music(
+        "cdefgabh"); /* string's if is hard-coded to handle a max of only 8
+                        notes. */
+  /* TODO: add support for strings > 8 notes.*/
+
   digitalWrite(LED->pin, LED->state);
   Toggle->prev_state = Toggle->pressed;
 }
