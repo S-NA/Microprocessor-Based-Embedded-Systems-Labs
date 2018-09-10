@@ -65,12 +65,14 @@ typedef sound_s snd;
 struct music_s {
   char composition[8];
   double frequency[8];
+  double octave_frequency[8];
   uint8_t duration[8];
   uint8_t octave;
   uint8_t position;
-} msc_def = {{'h', 'd', 'd', 'f', 'a', 'f', 'g', 'h'},
+} msc_def = {{'c', 'd', 'e', 'f', 'g', 'a', 'b', 'h'}, //{'h', 'd', 'd', 'f', 'a', 'f', 'g', 'h'},
              {},
-             {16, 4, 8, 16, 4, 8, 16, 16},
+             {},
+             {16, 8, 8, 16, 8, 8, 16, 8},
              1,
              0};
 typedef music_s msc;
@@ -107,7 +109,8 @@ uint8_t get_pitch(char note) {
  */
 void update_music(char *composition) {
   for (int i = 0; i < 8; i++) {
-    uint8_t pitch = /* octave * */get_pitch(composition[i]);
+    uint8_t pitch = get_pitch(composition[i]);
+    Music->octave_frequency[i] = 261.2 * pow(2, (2 * pitch) / 12.);
     Music->frequency[i] = 261.2 * pow(2, pitch / 12.);
   }
   Sound->position = 0; /* Sound device should start anew. */
@@ -116,7 +119,11 @@ void update_music(char *composition) {
 
 void play_music() {
   uint8_t length = Music->duration[Sound->position];
-  tone(Sound->output, Music->frequency[Sound->position++], 70 * length);
+  if (digitalRead(9) == HIGH) { /* Touch pad sensor, check. */
+    tone(Sound->output, Music->octave_frequency[Sound->position++], 70 * length);
+  } else {
+    tone(Sound->output, Music->frequency[Sound->position++], 70 * length);
+  }
   delay(10 * length);
   noTone(Sound->output);
   if (Sound->position > 7)
@@ -133,6 +140,9 @@ void print_music_composition() {
 void setup() {
   pinMode(Toggle->pin, INPUT_PULLUP);
   pinMode(LED->pin, OUTPUT);
+  pinMode(10, OUTPUT);
+  pinMode(9, INPUT_PULLUP);
+  digitalWrite(10, HIGH);
   digitalWrite(LED->pin,
                LED->state); /* Our inital default for the LED is off, i.e. 0*/
   update_music(Music->composition); /* Generates default frequencies. */
