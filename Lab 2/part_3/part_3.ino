@@ -57,18 +57,19 @@ void do_pin_10_fast_pwm(long double freq, long double duty) {
     break;
   case 8: Timer1->mode = 0x02;
     break;
-  case 64: Timer1->mode = 0x04;
+  case 64: Timer1->mode = 0x03;
     break;
-  case 256: Timer1->mode = 0x06;
+  case 256: Timer1->mode = 0x04;
     break;
-  default: Timer1->mode = 0x07;
+  case 1024: Timer1->mode = 0x05;
     break;
+    default: return;
   }
 
   TCCR1B = (TCCR1B & 0b11111000) | Timer1->mode;
   /* TODO: Fix to handle floating point numbers. (0.5, 0.24, ...) */
-  Timer1->top = (16000000.0 / (Timer1->max_top - 1)) / Timer1->prescaler;
-  unsigned int duty_cycle = (duty / 100.0) * Timer1->top;
+  Timer1->top = 16000000.0 / freq / Timer1->prescaler - 1;
+  unsigned int duty_cycle = (duty / 100) * Timer1->top;
   ICR1 = Timer1->top;
   OCR1B = duty_cycle;
 }
@@ -80,7 +81,7 @@ void loop() {
     /* Clear the serial line of junk. */
     while (Serial.available()) { Serial.read(); }
     do_pin_10_fast_pwm(Timer1->freq, Timer1->duty);
-/* String() does not like long double... */
-//    Serial.println("Timer1->freq = " + String(Timer1->freq) + " Timer1->duty = " + String(Timer1->duty));
+    /* String() does not like long double... */
+    Serial.println("Timer1->freq = " + String(double(Timer1->freq)) + " Timer1->duty = " + String(double(Timer1->duty)));
   }
 }
