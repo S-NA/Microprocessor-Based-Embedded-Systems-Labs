@@ -15,12 +15,12 @@ const unsigned pin = 10;
 /* Table 19-9. Waveform Generation Mode Bit Description.
  * Mode 3, Fast PWM, TOP: 0xFF, TOV Flag set on MAX.*/
 struct timer1_s {
-  const long double max_top;
+  const double max_top;
   long prescaler;
-  long double n_top;
-  long double top;
-  long double freq;
-  long double duty;
+  double n_top;
+  double top;
+  double freq;
+  double duty;
   unsigned char mode;
 } timer1_def = { 65536, 1, 0, 0, 0, 0, 0 };
 typedef struct timer1_s timer1;
@@ -72,6 +72,14 @@ void do_pin_10_fast_pwm(long double freq, long double duty) {
   unsigned int duty_cycle = (duty / 100) * Timer1->top;
   ICR1 = Timer1->top;
   OCR1B = duty_cycle;
+
+  Serial.println(Timer1->max_top);
+  Serial.println(Timer1->prescaler);
+  Serial.println(Timer1->n_top);
+  Serial.println(Timer1->top);
+  Serial.println(Timer1->freq);
+  Serial.println(Timer1->duty);
+  Serial.println(Timer1->mode);
 }
 
 void loop() {

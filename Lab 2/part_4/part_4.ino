@@ -21,9 +21,9 @@ const uint8_t sensor_pin    =  8;
 struct timer1_s {
   const uint32_t max_top;
   uint16_t       prescaler;
-  double n_top;
-  double top;
-  double freq;
+  float n_top;
+  float top;
+  float freq;
   uint8_t     duty;
   unsigned char mode;
 } timer1_def = { 65536, 1, 0, 0, 0, 0, 0 };
@@ -31,11 +31,11 @@ typedef struct timer1_s timer1;
 
 struct sample_s {
   const uint8_t relative_delta;
-  double  prev_freq;
-  double  curr_freq;
+  float  prev_freq;
+  float  curr_freq;
   uint8_t prev_duty;
   uint8_t curr_duty;
-} sample_def = { 5, 0, 0, 0, 0 };
+} sample_def = { 5, 0.0, 0.0, 0, 0 };
 
 timer1   *Timer1  = &timer1_def;
 sample_s *Sample  = &sample_def;
@@ -57,7 +57,7 @@ void setup() {
   OCR1B = 0x02FE; /* 766 */
 }
 
-void do_pin_10_fast_pwm(double freq, uint8_t duty) {
+void do_pin_10_fast_pwm(float freq, uint8_t duty) {
   Serial.println("Setting pin " + String(generator_pin) + "...");
   Timer1->n_top = 16000000.0 / freq;
   if (Timer1->n_top <= 1 * Timer1->max_top) Timer1->prescaler = 1;
@@ -81,13 +81,13 @@ void do_pin_10_fast_pwm(double freq, uint8_t duty) {
   }
 
   TCCR1B = (TCCR1B & 0b11111000) | Timer1->mode;
-  Timer1->top = 16000000.0 / freq / Timer1->prescaler - 1;
-  uint8_t duty_cycle = (duty / 100) * Timer1->top;
+  Timer1->top = Timer1->n_top / Timer1->prescaler - 1;
+  unsigned int duty_cycle = (duty / 100) * Timer1->top;
   ICR1 = Timer1->top;
   OCR1B = duty_cycle;
 }
 
-double get_relative_delta(double a, double b) {
+float get_relative_delta(float a, float b) {
   return ((max(a, b) - min(a, b)) / max(a, b)) * 100.0;
 }
 
@@ -95,18 +95,18 @@ uint8_t get_relative_delta(uint8_t a, uint8_t b) {
   return ((max(a, b) - min(a, b)) / max(a, b)) * 100;
 }
 
-void get_frequency_and_duty(uint8_t sensor_pin, double &freq, uint8_t &duty) {
+void get_frequency_and_duty() {
   unsigned long pwm_high = pulseIn(sensor_pin, HIGH);
   unsigned long pwm_low  = pulseIn(sensor_pin, LOW);
   /* microseconds to seconds (by dividing by 1 million). */
-  double period   = (pwm_high + pwm_low) / 1000000;
-  freq = 1 / period;
-  duty = (pwm_high / 1000000.0) / period;
+  float period   = (pwm_high + pwm_low) / 1000000;
+  Sample->curr_freq = 1 / period;
+  Sample->curr_duty = (pwm_high / 1000000.0) / period;
 }
 
 void loop() {
-  if (Serial.available() >= 2) {
-    Timer1->freq = double(Serial.parseFloat());
+  if (Serial.available() >= 2) { 
+    Timer1->freq = Serial.parseFloat();
     Timer1->duty = Serial.parseInt();
     /* Clear the serial line of junk. */
     while (Serial.available()) { Serial.read(); }
@@ -117,9 +117,11 @@ void loop() {
    * Begin measuring a square wave input from digital pin 8 (sensor_pin).
    * When the instant change is > 5%, we print the measured values.
    */
-  get_frequency_and_duty(sensor_pin, Sample->curr_freq, Sample->curr_duty);
-  if (get_relative_delta(Sample->curr_freq, Sample->prev_freq) >= Sample->relative_delta
-  ||  get_relative_delta(Sample->curr_duty, Sample->prev_duty) >= Sample->relative_delta) {
+  get_frequency_and_duty();
+  float frequency_delta = get_relative_delta(Sample->curr_freq, Sample->prev_freq);
+  uint8_t duty_delta    = get_relative_delta(Sample->curr_duty, Sample->curr_duty);
+  if ((frequency_delta >= Sample->relative_delta || duty_delta >= Sample->relative_delta)
+  &&  (Sample->curr_freq != Sample->curr_freq)) {
     Serial.println("Measured values: (" + String(Sample->curr_freq) + ", " + String(Sample->curr_duty) +")");
   }
   Sample->prev_freq = Sample->curr_freq;
