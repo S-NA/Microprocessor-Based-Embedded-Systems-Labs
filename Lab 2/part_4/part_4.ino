@@ -12,6 +12,8 @@
  * (Verify the code in operation through the oscilloscope.)
  */
 
+#include <math.h>
+
 /* generator_pin is slightly useless due to function being tied to pin 10. */
 const uint8_t generator_pin = 10;
 const uint8_t sensor_pin    =  8;
@@ -21,21 +23,21 @@ const uint8_t sensor_pin    =  8;
 struct timer1_s {
   const uint32_t max_top;
   uint16_t       prescaler;
-  float n_top;
-  float top;
-  float freq;
-  uint8_t     duty;
+  float          n_top;
+  float          top;
+  float          freq;
+  float          duty;
   unsigned char mode;
-} timer1_def = { 65536, 1, 0, 0, 0, 0, 0 };
+} timer1_def = { 65536, 1, NAN, NAN, NAN, NAN, 0x01 };
 typedef struct timer1_s timer1;
 
 struct sample_s {
   const uint8_t relative_delta;
-  float  prev_freq;
-  float  curr_freq;
-  uint8_t prev_duty;
-  uint8_t curr_duty;
-} sample_def = { 5, 0.0, 0.0, 0, 0 };
+  float         prev_freq;
+  float         curr_freq;
+  float         prev_duty;
+  float         curr_duty;
+} sample_def = { 10, NAN, NAN, NAN, NAN };
 
 timer1   *Timer1  = &timer1_def;
 sample_s *Sample  = &sample_def;
@@ -96,34 +98,40 @@ uint8_t get_relative_delta(uint8_t a, uint8_t b) {
 }
 
 void get_frequency_and_duty() {
-  unsigned long pwm_high = pulseIn(sensor_pin, HIGH);
-  unsigned long pwm_low  = pulseIn(sensor_pin, LOW);
+  unsigned long pwm_high = pulseInLong(sensor_pin, HIGH);
+  unsigned long pwm_low  = pulseInLong(sensor_pin, LOW);
+  if (!pwm_high || !pwm_low) {
+    Serial.println("Unable to sample pin " + String(sensor_pin));
+    return;
+  }
+  double period   = (pwm_high + pwm_low);
   /* microseconds to seconds (by dividing by 1 million). */
-  float period   = (pwm_high + pwm_low) / 1000000;
-  Sample->curr_freq = 1 / period;
-  Sample->curr_duty = (pwm_high / 1000000.0) / period;
+  Sample->curr_freq = 1 / (period / 1000000.0);
+  Sample->curr_duty = (pwm_high * 100/ period);
 }
 
 void loop() {
-  if (Serial.available() >= 2) { 
+  if (Serial.available() >= 2) {
     Timer1->freq = Serial.parseFloat();
     Timer1->duty = Serial.parseInt();
     /* Clear the serial line of junk. */
     while (Serial.available()) { Serial.read(); }
     do_pin_10_fast_pwm(Timer1->freq, Timer1->duty);
-    Serial.println("Timer1->freq = " + String(Timer1->freq) + " Timer1->duty = " + String(Timer1->duty));
+    // analogWrite(generator_pin, Timer1->duty);
+    // Serial.println("Timer1->freq = " + String(Timer1->freq) + " Timer1->duty = " + String(Timer1->duty));
   }
   /**
    * Begin measuring a square wave input from digital pin 8 (sensor_pin).
-   * When the instant change is > 5%, we print the measured values.
+   * When the instant change is > 10%, we print the measured values.
    */
   get_frequency_and_duty();
   float frequency_delta = get_relative_delta(Sample->curr_freq, Sample->prev_freq);
-  uint8_t duty_delta    = get_relative_delta(Sample->curr_duty, Sample->curr_duty);
-  if ((frequency_delta >= Sample->relative_delta || duty_delta >= Sample->relative_delta)
-  &&  (Sample->curr_freq != Sample->curr_freq)) {
+  uint8_t duty_delta    = get_relative_delta(Sample->curr_duty, Sample->prev_duty);
+  if (isfinite(Sample->curr_freq) && isfinite(Sample->curr_duty)
+  && (frequency_delta >= Sample->relative_delta || duty_delta >= Sample->relative_delta)) {
     Serial.println("Measured values: (" + String(Sample->curr_freq) + ", " + String(Sample->curr_duty) +")");
   }
+
   Sample->prev_freq = Sample->curr_freq;
   Sample->prev_duty = Sample->curr_duty;
 }
