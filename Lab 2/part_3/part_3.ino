@@ -80,6 +80,7 @@ void do_pin_10_fast_pwm(long double freq, long double duty) {
   Serial.println(Timer1->freq);
   Serial.println(Timer1->duty);
   Serial.println(Timer1->mode);
+  Serial.println(OCR1B);
 }
 
 void loop() {
