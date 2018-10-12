@@ -9,20 +9,16 @@ struct signal_generator_s {
   unsigned long pwm_low;
   unsigned long period;
   float frequency;
-  unsigned long duty_cycle; /* likely uneeded */
   const byte pin;
-} signal_generator_def = { 0, 0, 0, 0, 0, 8 };
+} signal_generator_def = { 0, 0, 0, 0, 8 };
 typedef struct signal_generator_s signal_generator;
 
 struct led_s {
-  unsigned long pwm_high;
-  unsigned long pwm_low;
-  unsigned long period;
   float frequency;
-  unsigned long duty_cycle;
   unsigned long currentTime;
+  bool toggle;
   const byte pin;
-} led_def = { 0, 0, 0, 0, 0, 0, 8 };
+} led_def = { 0, 0, 0, 10 };
 typedef struct led_s led;
 
 force_resistor *ForceResistor = &force_resistor_def;
@@ -45,15 +41,12 @@ void loop() {
   SignalGenerator->pwm_low = pulseIn(SignalGenerator->pin, LOW);
   SignalGenerator->period = (SignalGenerator->pwm_low + SignalGenerator->pwm_high);
   SignalGenerator->frequency = (1 / (SignalGenerator->period / 1000000.0));
-  /* Duty cycle uneeded, keep in case we deal with this using registers instead of analogWrite() */
-  SignalGenerator->duty_cycle = (float(SignalGenerator->pwm_high) / float(SignalGenerator->period)) * 100.0;
-
-  /* if (currentTime + (500 / (SignalGenerator->frequency / 1000) > millis() ?... 
-   *  analogWrite(SignalGenerator->pin, ForceResistor->value);
-   *  on ? off : logic
-   *  currentTime = millis()
-   */
-
-  Serial.println(ForceResistor->value);
-  Serial.println(SignalGenerator->frequency);
+  LED->frequency = SignalGenerator->frequency;
+  if (LED->currentTime + (500 / (LED->frequency/1000)) > millis()) {
+    if (LED->toggle) analogWrite(LED->pin, ForceResistor->value);
+    else analogWrite(LED->pin, 0);
+  } else {
+    LED->toggle = !LED->toggle;
+    LED->currentTime = millis();
+  }
 }
