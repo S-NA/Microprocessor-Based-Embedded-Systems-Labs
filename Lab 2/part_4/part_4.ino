@@ -12,18 +12,27 @@
  * (Verify the code in operation through the oscilloscope.)
  */
 
+/**
+ * Calculations are thrown off for when measuring PWM if the functions are not
+ * inlined.
+ */
+inline void do_generator_pin_10_fast_pwm(void) __attribute__((always_inline));
+inline void get_frequency_and_duty(void) __attribute__((always_inline));
+inline float get_relative_delta(float, float) __attribute__ ((always_inline));
+inline uint8_t get_relative_delta(uint8_t, uint8_t) __attribute__ ((always_inline));
+
 const unsigned generator_pin = 10;
 const unsigned measure_pin = 8;
 
 /* Table 19-9. Waveform Generation Mode Bit Description.
  * Mode 3, Fast PWM, TOP: 0xFF, TOV Flag set on MAX.*/
 struct timer1_s {
-  const double max_top;
+  const float max_top;
   long prescaler;
-  double n_top;
-  double top;
-  double freq;
-  double duty;
+  float n_top;
+  float top;
+  float freq;
+  float duty;
   unsigned char mode;
 } timer1_def = { 65536, 1, 0, 0, 0, 0, 0 };
 typedef struct timer1_s timer1;
@@ -52,17 +61,17 @@ void setup() {
   pinMode(generator_pin, OUTPUT);
 
   /* Note, we overwrite the entire register to set the mode.
-   * _BV(x) = x bit value */
-  TCCR1A = _BV(COM1B1) | _BV(WGM11) | _BV(WGM11); /* mode */
-  TCCR1B = _BV(CS11)   | _BV(WGM13) | _BV(WGM12); /* mode */
+   * bit(x) = (1UL << x) */
+  TCCR1A = bit(COM1B1) | bit(WGM11); /* select OCR1B, and fast PWM */
+  TCCR1B = bit(CS11)   | bit(WGM13) | bit(WGM12); /* prescaler, and fast pwm */
 
-  ICR1 = 0x07D0; /* 2000 */
-  OCR1B = 0x02FE; /* 766 */
+  ICR1 = F_CPU / 1000 / 8; /* F_CPU / FREQ / PRESCALER */
+  OCR1B = ICR1 * .5; /* FREQ / %DUTY */;
 }
 
-void do_generator_pin_10_fast_pwm(long double freq, long double duty) {
+void do_generator_pin_10_fast_pwm() {
   Serial.println("Setting generator_pin 10...");
-  Timer1->n_top = 16000000.0 / freq;
+  Timer1->n_top = F_CPU / Timer1->freq;
   if (Timer1->n_top <= 1 * Timer1->max_top) Timer1->prescaler = 1;
   else if (Timer1->n_top <= 8 * Timer1->max_top) Timer1->prescaler = 8;
   else if (Timer1->n_top <= 64 * Timer1->max_top) Timer1->prescaler = 64;
@@ -84,9 +93,8 @@ void do_generator_pin_10_fast_pwm(long double freq, long double duty) {
   }
 
   TCCR1B = (TCCR1B & 0b11111000) | Timer1->mode;
-  /* TODO: Fix to handle floating point numbers. (0.5, 0.24, ...) */
-  Timer1->top = 16000000.0 / freq / Timer1->prescaler - 1;
-  unsigned int duty_cycle = (duty / 100) * Timer1->top;
+  Timer1->top = Timer1->n_top / Timer1->prescaler - 1;
+  unsigned long duty_cycle = (Timer1->duty / 100) * Timer1->top;
   ICR1 = Timer1->top;
   OCR1B = duty_cycle;
 }
@@ -99,29 +107,34 @@ uint8_t get_relative_delta(uint8_t a, uint8_t b) {
   return ((max(a, b) - min(a, b)) / max(a, b)) * 100;
 }
 
+void get_frequency_and_duty() {
+  const byte cycles = 255;
+  Sample->pwm_low = 0;
+  Sample->pwm_high = 0;
+  for (byte i = 0; i < cycles; ++i) {
+    Sample->pwm_low += pulseIn(measure_pin, LOW);
+    Sample->pwm_high += pulseIn(measure_pin, HIGH);
+  }
+  Sample->pwm_low  /= cycles;
+  Sample->pwm_high /= cycles;
+
+  Sample->period = Sample->pwm_low + Sample->pwm_high;
+  Sample->curr_freq = (1 / (Sample->period / 1000000.0));
+  Sample->curr_duty = (Sample->pwm_high / float(Sample->period)) * 100.0;
+}
+
 void loop() {
   if (Serial.available() >= 2) {
-    Timer1->freq = double(Serial.parseFloat());
+    Timer1->freq = Serial.parseFloat();
     Timer1->duty = Serial.parseInt();
     /* Clear the serial line of junk. */
     while (Serial.available()) { Serial.read(); }
-    do_generator_pin_10_fast_pwm(Timer1->freq, Timer1->duty);
+    do_generator_pin_10_fast_pwm();
     /* String() does not like long double... */
-    Serial.println("Setting Timer1->freq = " + String(double(Timer1->freq)) + " Timer1->duty = " + String(double(Timer1->duty)));
+    Serial.println("Setting Timer1->freq = " + String(Timer1->freq) + " Timer1->duty = " + String(Timer1->duty));
   }
-  const byte cycles = 64;
-  Sample->pwm_low = 0;
-  Sample->pwm_high = 0;
-  for (byte i = 0; i < cycles; i++) {
-    Sample->pwm_low += pulseInLong(measure_pin, LOW);
-    Sample->pwm_high += pulseInLong(measure_pin, HIGH);
-  }
-  Sample->pwm_high /= cycles;
-  Sample->pwm_low /= cycles;
 
-  Sample->period = (Sample->pwm_low + Sample->pwm_high);
-  Sample->curr_freq = (1 / (Sample->period / 1000000.0));
-  Sample->curr_duty = (float(Sample->pwm_high) / float(Sample->period)) * 100.0;
+  get_frequency_and_duty();
 
   if (isfinite(Sample->curr_freq) && isfinite(Sample->prev_freq) && isfinite(Sample->curr_duty) && isfinite(Sample->prev_duty)) {
     float frequency_delta = get_relative_delta(Sample->curr_freq, Sample->prev_freq);
@@ -133,6 +146,5 @@ void loop() {
 
   Sample->prev_freq = Sample->curr_freq;
   Sample->prev_duty = Sample->curr_duty;
-  
 }
 
